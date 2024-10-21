@@ -1,0 +1,5 @@
+pydub
+moviepy
+ffmpeg-python
+opencv-python
+numpy

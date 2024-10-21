@@ -13,7 +13,7 @@ def get_convert_video2mp4(input_file):
 
     return VideoFileClip(output_file)
 
-def process_video(input_file):
+def process_video(input_file, top_percent = 0.1, padding_start = 10000, padding_end = 10000):
     # Extract audio from video
     video = get_convert_video2mp4(input_file)
     audio = video.audio
@@ -30,7 +30,7 @@ def process_video(input_file):
     # Calculate dBFS for each chunk and select top 10%
     loudness = [(chunk.dBFS, i) for i, chunk in enumerate(chunks)]
     loudness.sort(reverse=True)
-    top_10_percent = int(0.1 * len(loudness))
+    top_10_percent = int(top_percent * len(loudness))
     top_chunks_indices = [index for _, index in loudness[:top_10_percent]]
 
     # Merge chunks that are within 10 seconds of each other
@@ -50,8 +50,8 @@ def process_video(input_file):
     # Pad and export each merged chunk
     output_files = []
     for i, indices in enumerate(merged_chunks):
-        start = max(0, indices[0] * chunk_length - 10000)
-        end = (indices[-1] + 1) * chunk_length + 10000
+        start = max(0, indices[0] * chunk_length - padding_start)
+        end = (indices[-1] + 1) * chunk_length + padding_end
         chunk_audio = audio_segment[start:end]
 
         # Export to mp4
