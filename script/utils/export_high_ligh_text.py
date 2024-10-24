@@ -107,8 +107,8 @@ def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
         start = transcriptions['chunks'][idx]['timestamp'][0]
         end = transcriptions['chunks'][idx]['timestamp'][0]
         padding = abs(min_chunk-(end-start))/2
-        start = max(0,start-padding)
-        end = end + padding
+        start = (max(0,start-padding))*1000
+        end = (end + padding)*1000
         chunk_audio = audio_segment[start:end]
 
         # Export to mp4
