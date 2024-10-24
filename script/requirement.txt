@@ -1,5 +1,9 @@
 pydub
-moviepy
 ffmpeg-python
 opencv-python
+moviepy
 numpy
+transformers
+google-generativeai
+python-Levenshtein
+accelerate>=0.26.0
