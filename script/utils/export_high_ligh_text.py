@@ -70,7 +70,7 @@ def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
     print("Transcribe video ... ")
     transcriptions = pipe_oai_ft_v3(chunk_path, generate_kwargs=generate_kwargs, return_timestamps=True )
 
-    gemini_key = "AIzaSyDb6EjyKsCigYH9gR2TmOfxrPW5LlawYHQ"
+    gemini_key = os.environ.get("GEMINI_KEY")
     genai.configure(api_key=gemini_key)
     model = genai.GenerativeModel("gemini-1.5-flash")
 
