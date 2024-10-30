@@ -68,7 +68,10 @@ def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
         "temperature": 0.666
         }
     print("Transcribe video ... ")
-    transcriptions = pipe_oai_ft_v3(chunk_path, generate_kwargs=generate_kwargs, return_timestamps=True )
+    audio_segment = AudioSegment.from_file(chunk_path)
+    audio_mp3_path = chunk_path.replace('.mp4','mp3')
+    audio_segment.export(audio_mp3_path)
+    transcriptions = pipe_oai_ft_v3(audio_mp3_path, generate_kwargs=generate_kwargs, return_timestamps=True )
 
     gemini_key = os.environ.get("GEMINI_KEY")
     genai.configure(api_key=gemini_key)
@@ -99,33 +102,36 @@ def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
     list_a = list(map(lambda x:x['text'], transcriptions['chunks']))
     list_b = list(filter(lambda x:len(x) >1, response.text.split('\n')))
 
-    audio_segment = AudioSegment.from_file(chunk_path)
+    
     video = VideoFileClip(chunk_path)
     output_files = []
     for i, idx in enumerate(find_best_matches(list_a, list_b)):
-        transcriptions['chunks'][idx]
-        start = transcriptions['chunks'][idx]['timestamp'][0]
-        end = transcriptions['chunks'][idx]['timestamp'][0]
-        padding = abs(min_chunk-(end-start))/2
-        start = (max(0,start-padding))*1000
-        end = (end + padding)*1000
-        chunk_audio = audio_segment[start:end]
+        try:
+            transcriptions['chunks'][idx]
+            start = transcriptions['chunks'][idx]['timestamp'][0]
+            end = transcriptions['chunks'][idx]['timestamp'][0]
+            padding = abs(min_chunk-(end-start))/2
+            start = (max(0,start-padding))*1000
+            end = (end + padding)*1000
+            chunk_audio = audio_segment[start:end]
 
-        # Export to mp4
-        file_name = chunk_path.replace('.mp4', "").replace("/mnt/disk2/tiktok_data/raw_vid","/mnt/disk2/tiktok_data/processed_vid")
-        os.makedirs(f"{file_name}", exist_ok=True)
-        output_audio_file = f"{file_name}/chunk_{i}.wav"
-        chunk_audio.export(output_audio_file, format="wav")
-        chunk_audio_clip= AudioFileClip(output_audio_file)
+            # Export to mp4
+            file_name = chunk_path.replace('.mp4', "").replace("/mnt/disk2/tiktok_data/raw_vid","/mnt/disk2/tiktok_data/processed_vid")
+            os.makedirs(f"{file_name}", exist_ok=True)
+            output_audio_file = f"{file_name}/chunk_{i}.wav"
+            chunk_audio.export(output_audio_file, format="wav")
+            chunk_audio_clip= AudioFileClip(output_audio_file)
 
-        # Merge with the original video
-        output_video_file = f"{file_name}/chunk_llm_{i}.mp4"
-        output_clip = video.subclip(start / 1000, end / 1000)
-        output_clip = output_clip.set_audio(chunk_audio_clip)
-        output_clip.write_videofile(output_video_file, codec="libx264", audio_codec="aac")
+            # Merge with the original video
+            output_video_file = f"{file_name}/chunk_llm_{i}.mp4"
+            output_clip = video.subclip(start / 1000, end / 1000)
+            output_clip = output_clip.set_audio(chunk_audio_clip)
+            output_clip.write_videofile(output_video_file, codec="libx264", audio_codec="aac")
 
-        output_files.append(output_video_file)
+            output_files.append(output_video_file)
 
-        # Clean up temporary audio files
-        os.remove(output_audio_file)
+            # Clean up temporary audio files
+            os.remove(output_audio_file)
+        except Exception as e:
+            print(e)
     return output_files
