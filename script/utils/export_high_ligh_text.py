@@ -69,13 +69,13 @@ def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
         }
     print("Transcribe video ... ")
     audio_segment = AudioSegment.from_file(chunk_path)
-    audio_mp3_path = chunk_path.replace('.mp4','mp3')
+    audio_mp3_path = chunk_path.replace('.mp4','.mp3')
     audio_segment.export(audio_mp3_path)
     transcriptions = pipe_oai_ft_v3(audio_mp3_path, generate_kwargs=generate_kwargs, return_timestamps=True )
 
     gemini_key = os.environ.get("GEMINI_KEY")
     genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-1.5-pro-002")
 
     prompt_template = """Context:
     I have a transcript from a livestream video about a sale.
@@ -89,6 +89,7 @@ def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
     Analyze the transcript to determine which sentences best represent the excitement and key points of the sale.
     Select sentences that showcase important offers, exclusive deals, or engaging interactions.
     Provide a list of the top {top_k} sentences that encapsulate the livestream’s highlights.
+    If the livestream content include multiple product, provide many as products as posible in the top {top_k}.
     Please return top {top_k} sentence only, no explain, every sentence in a line """
 
     generation_config=genai.types.GenerationConfig(
