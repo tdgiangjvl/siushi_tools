@@ -22,8 +22,14 @@ def find_best_matches(list_a, list_b):
         indices.append(best_idx)
     return indices
 
-def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
+def chunking_video_by_transcript(chunk_path, top_k = 2, min_chunk = 30, highlight_window = 1800):
     transcript_path = chunk_path.replace('.mp4','.pkl')
+    audio_mp3_path = chunk_path.replace('.mp4','.mp3')
+    if not os.path.isfile(audio_mp3_path):
+        audio_segment = AudioSegment.from_file(chunk_path)
+        audio_segment.export(audio_mp3_path)
+    else:
+        audio_segment = AudioSegment.from_file(audio_mp3_path)
     if not os.path.isfile(transcript_path):
         MODEL_ID = "openai/whisper-large-v3"
         LANGUAGE = "vi"
@@ -71,9 +77,6 @@ def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
             "temperature": 0.666
             }
         print("Transcribe video ... ")
-        audio_segment = AudioSegment.from_file(chunk_path)
-        audio_mp3_path = chunk_path.replace('.mp4','.mp3')
-        audio_segment.export(audio_mp3_path)
         transcriptions = pipe_oai_ft_v3(audio_mp3_path, generate_kwargs=generate_kwargs, return_timestamps=True )
         with open(transcript_path, 'wb') as file:
             pickle.dump(transcriptions, file)
@@ -83,7 +86,7 @@ def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
 
     gemini_key = os.environ.get("GEMINI_KEY")
     genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel("gemini-1.5-pro-002")
+    model = genai.GenerativeModel("gemini-1.5-flash-002")
 
     prompt_template = """Context:
     I have a transcript from a livestream video about a sale.
@@ -97,20 +100,25 @@ def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
     Analyze the transcript to determine which sentences best represent the excitement and key points of the sale.
     Select sentences that showcase important offers, exclusive deals, or engaging interactions.
     Provide a list of the top {top_k} sentences that encapsulate the livestream’s highlights.
-    If the livestream content include multiple product, provide many as products as posible in the top {top_k}.
     Please return top {top_k} sentence only, no explain, every sentence in a line """
 
     generation_config=genai.types.GenerationConfig(
             temperature=.666,
         )
-    transcription_text = " ".join(map(lambda x:x['text'], transcriptions['chunks']))
-    print("Analyzing video ...")
-    response = model.generate_content(prompt_template.format(transcription = transcription_text, top_k = top_k), generation_config=generation_config)
-
-    # Example usage:
+    start_idx = 0
     list_a = list(map(lambda x:x['text'], transcriptions['chunks']))
-    list_b = list(filter(lambda x:len(x) >1, response.text.split('\n')))
-
+    list_b = []
+    print("Analyzing video ...")
+    for end_idx in range(len(transcriptions['chunks'])):
+        if transcriptions['chunks'][end_idx]['timestamp'][0] - transcriptions['chunks'][start_idx]['timestamp'][0] < highlight_window:
+            continue
+        transcription_text = " ".join(map(lambda x:x['text'], transcriptions['chunks'][start_idx:end_idx]))
+        print(f"Analyzing {start_idx} to {end_idx} ...")
+        response = model.generate_content(prompt_template.format(transcription = transcription_text, top_k = top_k), generation_config=generation_config)
+        print("choosed text:")
+        print(response.text)
+        list_b += list(filter(lambda x:len(x) >1, response.text.split('\n')))
+        start_idx = end_idx
     
     video = VideoFileClip(chunk_path)
     output_files = []
