@@ -6,6 +6,7 @@ import os
 import Levenshtein
 from pydub import AudioSegment
 from moviepy.editor import VideoFileClip, AudioFileClip
+import pickle
 import ffmpeg
 
 def find_best_matches(list_a, list_b):
@@ -22,56 +23,63 @@ def find_best_matches(list_a, list_b):
     return indices
 
 def chunking_video_by_transcript(chunk_path, top_k = 10, min_chunk = 30):
-    MODEL_ID = "openai/whisper-large-v3"
-    LANGUAGE = "vi"
-    TASK = "transcribe"
-    device = "cuda:0"
-    # device = "cpu"
-    torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-    tokenizer = WhisperTokenizer.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK)
-    processor = WhisperProcessor.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK)
-    #
-    processor.tokenizer.pad_token = processor.tokenizer.eos_token
-    processor.tokenizer.set_prefix_tokens(language=LANGUAGE, task=TASK)
+    transcript_path = chunk_path.replace('.mp4','.pkl')
+    if not os.path.isfile(transcript_path):
+        MODEL_ID = "openai/whisper-large-v3"
+        LANGUAGE = "vi"
+        TASK = "transcribe"
+        device = "cuda:0"
+        # device = "cpu"
+        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        tokenizer = WhisperTokenizer.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK)
+        processor = WhisperProcessor.from_pretrained(MODEL_ID, language=LANGUAGE, task=TASK)
+        #
+        processor.tokenizer.pad_token = processor.tokenizer.eos_token
+        processor.tokenizer.set_prefix_tokens(language=LANGUAGE, task=TASK)
 
-    model_oai_ft_v3 = WhisperForConditionalGeneration.from_pretrained(
-        MODEL_ID,
-        torch_dtype=torch_dtype,
-        low_cpu_mem_usage=True, 
-        use_safetensors=True,
-    )
-    model_oai_ft_v3 = model_oai_ft_v3.to(device)
-    batch_size=30
-    pipe_oai_ft_v3 = pipeline(
-        "automatic-speech-recognition",
-        model=model_oai_ft_v3,
-        tokenizer=processor.tokenizer,
-        feature_extractor=processor.feature_extractor,
-        max_new_tokens=256,
-        chunk_length_s=10,
-        batch_size=batch_size,
-        # return_timestamps=True,
-        torch_dtype=torch_dtype,
-        device=device,
+        model_oai_ft_v3 = WhisperForConditionalGeneration.from_pretrained(
+            MODEL_ID,
+            torch_dtype=torch_dtype,
+            low_cpu_mem_usage=True, 
+            use_safetensors=True,
+        )
+        model_oai_ft_v3 = model_oai_ft_v3.to(device)
+        batch_size=30
+        pipe_oai_ft_v3 = pipeline(
+            "automatic-speech-recognition",
+            model=model_oai_ft_v3,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            max_new_tokens=256,
+            chunk_length_s=10,
+            batch_size=batch_size,
+            # return_timestamps=True,
+            torch_dtype=torch_dtype,
+            device=device,
+            generate_kwargs={
+                "task": "transcribe",
+                "language": "vi",
+                "no_repeat_ngram_size": 4, # Avoid repetition
+                "return_timestamps": True,
+                },
+        )
+
         generate_kwargs={
             "task": "transcribe",
             "language": "vi",
             "no_repeat_ngram_size": 4, # Avoid repetition
-            "return_timestamps": True,
-            },
-    )
-
-    generate_kwargs={
-        "task": "transcribe",
-        "language": "vi",
-        "no_repeat_ngram_size": 4, # Avoid repetition
-        "temperature": 0.666
-        }
-    print("Transcribe video ... ")
-    audio_segment = AudioSegment.from_file(chunk_path)
-    audio_mp3_path = chunk_path.replace('.mp4','.mp3')
-    audio_segment.export(audio_mp3_path)
-    transcriptions = pipe_oai_ft_v3(audio_mp3_path, generate_kwargs=generate_kwargs, return_timestamps=True )
+            "temperature": 0.666
+            }
+        print("Transcribe video ... ")
+        audio_segment = AudioSegment.from_file(chunk_path)
+        audio_mp3_path = chunk_path.replace('.mp4','.mp3')
+        audio_segment.export(audio_mp3_path)
+        transcriptions = pipe_oai_ft_v3(audio_mp3_path, generate_kwargs=generate_kwargs, return_timestamps=True )
+        with open(transcript_path, 'wb') as file:
+            pickle.dump(transcriptions, file)
+    else:
+        with open(transcript_path, 'rb') as file:
+            transcriptions = pickle.load(file)
 
     gemini_key = os.environ.get("GEMINI_KEY")
     genai.configure(api_key=gemini_key)
